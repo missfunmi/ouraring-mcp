@@ -505,7 +505,7 @@ def oura_auth_status() -> dict[str, Any]:
 
 
 def main() -> None:
-    print("Starting Oura MCP server!")
+    print("Oura MCP server ready. Listening on stdio — press Ctrl+C to stop.", flush=True)
     mcp.run(transport="stdio")
 
 
