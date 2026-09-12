@@ -28,7 +28,7 @@ def _validate_access_token(token: str) -> tuple[bool, str]:
             timeout=10.0,
         )
         if resp.status_code == 200:
-            email = resp.json().get("data", {}).get("email", "unknown")
+            email = resp.json().get("email", "unknown")
             return True, email
         if resp.status_code == 401:
             return False, "Token rejected (401)."

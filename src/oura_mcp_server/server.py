@@ -494,7 +494,7 @@ def oura_auth_status() -> dict[str, Any]:
             headers=client.headers,
         )
         if resp.status_code == 200:
-            email = resp.json().get("data", {}).get("email")
+            email = resp.json().get("email")
             return {"authenticated": True, "email": email, "storage": get_storage_backend()}
         return {
             "authenticated": False,
