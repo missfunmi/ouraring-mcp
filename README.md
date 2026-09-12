@@ -45,28 +45,50 @@ Dates should be provided in ISO format (`YYYY-MM-DD`).
 
 ## Usage
 
-You'll need an Oura API token to use this server. You can obtain one by:
+You'll need an Oura API token to use this server. You can obtain one from the [Oura Developer Portal](https://cloud.ouraring.com/personal-access-tokens).
 
-1. Going to the [Oura Developer Portal](https://cloud.ouraring.com/v2/docs)
-2. Creating a Personal Access Token
+### 1. Install
 
-### Claude for Desktop
+```bash
+pip install oura-mcp-server
+```
 
-Update your `claude_desktop_config.json` (located in `~/Library/Application\ Support/Claude/claude_desktop_config.json` on macOS and `%APPDATA%/Claude/claude_desktop_config.json` on Windows) to include the following
+### 2. Authenticate
+
+```bash
+oura-mcp auth
+```
+
+This stores your token in macOS Keychain (or `~/.config/ouraring-mcp/credentials.enc` as an AES-256-GCM fallback). No token is stored in any config file.
+
+### 3. Configure Claude for Desktop
+
+Add the following to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):
 
 ```json
 {
   "mcpServers": {
-    "oura": {
-      "command": "uvx",
-      "args": ["oura-mcp-server"],
-      "env": {
-        "OURA_API_TOKEN": "YOUR_OURA_API_TOKEN"
-      }
+    "ouraring": {
+      "command": "oura-mcp",
+      "args": ["serve"]
     }
   }
 }
 ```
+
+Restart Claude Desktop. No token or env var needed in the config.
+
+### Other CLI commands
+
+| Command | Description |
+|---|---|
+| `oura-mcp auth` | Store your PAT securely |
+| `oura-mcp auth-status` | Check if the stored token is valid |
+| `oura-mcp auth-clear` | Remove the stored token |
+| `oura-mcp config` | Print the Claude Desktop config snippet |
+| `oura-mcp serve` | Start the MCP server directly |
+
+Setting `OURA_API_TOKEN` in the environment still works and takes precedence over stored credentials.
 
 ## Example Queries
 
