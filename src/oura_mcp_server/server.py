@@ -333,10 +333,10 @@ mcp = FastMCP("Oura API MCP Server")
 
 
 def _get_client() -> "OuraClient | None":
-    """Load the stored PAT and return an OuraClient, or None if not authenticated."""
-    from oura_mcp_server.auth import get_credential
-    result = get_credential()
-    return OuraClient(result.token) if result.success and result.token else None
+    """Load the stored OAuth access token and return an OuraClient, or None if not authenticated."""
+    from oura_mcp_server.auth import get_access_token
+    token = get_access_token()
+    return OuraClient(token) if token else None
 
 
 # Add tools for querying sleep data
@@ -476,19 +476,19 @@ def oura_auth_status() -> dict[str, Any]:
     Check whether a valid Oura Personal Access Token is stored.
     Use this tool when other Oura tools return authentication errors.
     """
-    from oura_mcp_server.auth import get_credential, get_storage_backend
+    from oura_mcp_server.auth import get_access_token, get_storage_backend
 
-    result = get_credential()
-    if not result.success or not result.token:
+    token = get_access_token()
+    if not token:
         return {
             "authenticated": False,
-            "message": "No token stored. Run 'oura-mcp auth' to authenticate.",
+            "message": "No credential stored. Run 'oura-mcp auth' to authenticate.",
         }
 
+    client = _get_client()
+    if client is None:
+        return {"authenticated": False, "message": "Credential found but client failed to initialise."}
     try:
-        client = _get_client()
-        if client is None:
-            return {"authenticated": False, "message": "Token found but client failed to initialise."}
         resp = client.client.get(
             "https://api.ouraring.com/v2/usercollection/personal_info",
             headers=client.headers,

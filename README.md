@@ -45,23 +45,30 @@ Dates should be provided in ISO format (`YYYY-MM-DD`).
 
 ## Usage
 
-You'll need an Oura API token to use this server. You can obtain one from the [Oura Developer Portal](https://cloud.ouraring.com/personal-access-tokens).
+This server uses **Oura OAuth2**. You'll need a free developer application to get a Client ID and Client Secret.
 
-### 1. Install
+### 1. Create an Oura OAuth2 application
+
+1. Go to [https://cloud.ouraring.com/oauth/applications](https://cloud.ouraring.com/oauth/applications)
+2. Create a new application
+3. Set the redirect URI to `http://localhost:8085/callback`
+4. Note your **Client ID** and **Client Secret**
+
+### 2. Install
 
 ```bash
 pip install oura-mcp-server
 ```
 
-### 2. Authenticate
+### 3. Authenticate
 
 ```bash
 oura-mcp auth
 ```
 
-This stores your token in macOS Keychain (or `~/.config/ouraring-mcp/credentials.enc` as an AES-256-GCM fallback). No token is stored in any config file.
+Enter your Client ID and Client Secret when prompted. Your browser will open for Oura's authorization page — approve it, and the tokens are stored securely (macOS Keychain when available, or `~/.config/ouraring-mcp/credentials.enc` as an AES-256-GCM fallback). No credentials are stored in any config file.
 
-### 3. Configure Claude for Desktop
+### 4. Configure Claude for Desktop
 
 Add the following to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):
 
@@ -76,19 +83,19 @@ Add the following to your `claude_desktop_config.json` (located at `~/Library/Ap
 }
 ```
 
-Restart Claude Desktop. No token or env var needed in the config.
+Restart Claude Desktop. No tokens or env vars needed in the config. Access tokens are refreshed automatically.
 
 ### Other CLI commands
 
 | Command | Description |
 |---|---|
-| `oura-mcp auth` | Store your PAT securely |
-| `oura-mcp auth-status` | Check if the stored token is valid |
-| `oura-mcp auth-clear` | Remove the stored token |
+| `oura-mcp auth` | Authenticate via Oura OAuth2 |
+| `oura-mcp auth-status` | Check if the stored credential is valid |
+| `oura-mcp auth-clear` | Remove stored credentials |
 | `oura-mcp config` | Print the Claude Desktop config snippet |
 | `oura-mcp serve` | Start the MCP server directly |
 
-Setting `OURA_API_TOKEN` in the environment still works and takes precedence over stored credentials.
+Setting `OURA_API_TOKEN` in the environment still works as a fallback for legacy Personal Access Tokens.
 
 ## Example Queries
 

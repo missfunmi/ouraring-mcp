@@ -1,21 +1,26 @@
 """CLI commands for Oura Ring MCP Server."""
 
-import getpass
 import sys
 
 from oura_mcp_server.auth import (
+    OAuthCredential,
     clear_credential,
-    get_credential,
+    get_access_token,
+    get_oauth_credential,
     get_storage_backend,
     is_keyring_available,
-    store_credential,
+    store_oauth_credential,
 )
 
+OURA_AUTH_URL = "https://cloud.ouraring.com/oauth/authorize"
+OURA_TOKEN_URL = "https://api.ouraring.com/oauth/token"
+REDIRECT_URI = "http://localhost:8085/callback"
+SCOPES = "email personal daily heartrate workout tag session spo2"
 
-def _validate_token(token: str) -> tuple[bool, str]:
-    """Hit the Oura API to confirm the token. Returns (valid, email_or_error)."""
+
+def _validate_access_token(token: str) -> tuple[bool, str]:
+    """Hit the Oura personal_info endpoint. Returns (valid, email_or_error)."""
     import httpx
-
     try:
         resp = httpx.get(
             "https://api.ouraring.com/v2/usercollection/personal_info",
@@ -26,10 +31,104 @@ def _validate_token(token: str) -> tuple[bool, str]:
             email = resp.json().get("data", {}).get("email", "unknown")
             return True, email
         if resp.status_code == 401:
-            return False, "Token rejected (401). Check it was copied correctly."
+            return False, "Token rejected (401)."
         return False, f"Unexpected status {resp.status_code}."
     except Exception as e:
         return False, f"Network error: {e}"
+
+
+def _run_oauth_flow(client_id: str, client_secret: str) -> OAuthCredential | None:
+    """Run the OAuth2 authorization code flow. Opens browser, waits for callback."""
+    import secrets
+    import time
+    import webbrowser
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from urllib.parse import parse_qs, urlencode, urlparse
+
+    import httpx
+
+    state = secrets.token_urlsafe(16)
+    params = {
+        "response_type": "code",
+        "client_id": client_id,
+        "redirect_uri": REDIRECT_URI,
+        "scope": SCOPES,
+        "state": state,
+    }
+    auth_url = OURA_AUTH_URL + "?" + urlencode(params)
+
+    callback_data: dict[str, str] = {}
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            parsed = urlparse(self.path)
+            if parsed.path == "/callback":
+                qs = parse_qs(parsed.query)
+                callback_data["code"] = qs.get("code", [""])[0]
+                callback_data["state"] = qs.get("state", [""])[0]
+                callback_data["error"] = qs.get("error", [""])[0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(
+                    b"<html><body><h1>Authentication successful!</h1>"
+                    b"<p>You can close this tab.</p></body></html>"
+                )
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass  # suppress server logs
+
+    server = HTTPServer(("localhost", 8085), CallbackHandler)
+    server.timeout = 120
+
+    print("Opening browser for Oura authorization...")
+    print(f"If it doesn't open, visit:\n  {auth_url}")
+    print()
+    webbrowser.open(auth_url)
+
+    server.handle_request()
+    server.server_close()
+
+    if callback_data.get("error"):
+        print(f"Error from Oura: {callback_data['error']}")
+        return None
+
+    code = callback_data.get("code", "")
+    if not code:
+        print("Error: No authorization code received.")
+        return None
+
+    if callback_data.get("state") != state:
+        print("Error: State mismatch — possible CSRF.")
+        return None
+
+    print("Exchanging code for tokens...")
+    try:
+        resp = httpx.post(
+            OURA_TOKEN_URL,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            },
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
+            print(f"Error: Token exchange failed ({resp.status_code}): {resp.text}")
+            return None
+        data = resp.json()
+        return OAuthCredential(
+            access_token=data["access_token"],
+            refresh_token=data["refresh_token"],
+            client_id=client_id,
+            client_secret=client_secret,
+            expires_at=time.time() + data.get("expires_in", 86400),
+        )
+    except Exception as e:
+        print(f"Error during token exchange: {e}")
+        return None
 
 
 def cmd_auth() -> int:
@@ -39,45 +138,60 @@ def cmd_auth() -> int:
 
     if not is_keyring_available():
         print("Warning: No system keyring available.")
-        print("Token will be stored in an encrypted file at ~/.config/ouraring-mcp/")
+        print("Credentials will be stored in an encrypted file at ~/.config/ouraring-mcp/")
         print()
 
-    existing = get_credential()
-    if existing.success and existing.token:
-        print("Existing token found. Validating...")
-        valid, info = _validate_token(existing.token)
+    existing = get_access_token()
+    if existing:
+        print("Existing credential found. Validating...")
+        valid, info = _validate_access_token(existing)
         if valid:
             print(f"Already authenticated: {info}")
             print()
             response = input("Re-authenticate? [y/N]: ").strip().lower()
             if response != "y":
                 return 0
+            print()
 
+    print("Enter your Oura OAuth2 application credentials.")
+    print("Get these from: https://cloud.ouraring.com/oauth/applications")
     print()
-    print("Get your Personal Access Token from:")
-    print("  https://cloud.ouraring.com/personal-access-tokens")
-    print()
+
+    existing_cred = get_oauth_credential()
 
     try:
-        token = getpass.getpass("Paste token (hidden): ").strip()
+        default_hint = f" [{existing_cred.client_id}]" if existing_cred else ""
+        client_id = input(f"Client ID{default_hint}: ").strip()
+        if not client_id and existing_cred:
+            client_id = existing_cred.client_id
+
+        import getpass
+        default_hint = " [stored]" if existing_cred else ""
+        client_secret = getpass.getpass(f"Client Secret{default_hint} (hidden): ").strip()
+        if not client_secret and existing_cred:
+            client_secret = existing_cred.client_secret
     except (KeyboardInterrupt, EOFError):
         print("\nCancelled.")
         return 1
 
-    if not token:
-        print("Error: No token provided.")
+    if not client_id or not client_secret:
+        print("Error: Client ID and Client Secret are required.")
         return 1
 
     print()
-    print("Validating...")
-    valid, info = _validate_token(token)
+    cred = _run_oauth_flow(client_id, client_secret)
+    if cred is None:
+        return 1
+
+    print("Validating token...")
+    valid, info = _validate_access_token(cred.access_token)
     if not valid:
         print(f"Error: {info}")
         return 1
 
-    result = store_credential(token)
+    result = store_oauth_credential(cred)
     if not result.success:
-        print(f"Error storing token: {result.message}")
+        print(f"Error storing credential: {result.message}")
         return 1
 
     print()
@@ -90,13 +204,13 @@ def cmd_auth() -> int:
 
 
 def cmd_auth_status() -> int:
-    cred = get_credential()
-    if not cred.success or not cred.token:
+    token = get_access_token()
+    if not token:
         print("Not authenticated. Run 'oura-mcp auth' to authenticate.")
         return 1
 
     print("Checking token...")
-    valid, info = _validate_token(cred.token)
+    valid, info = _validate_access_token(token)
     if valid:
         print(f"Authenticated: {info}")
         print(f"Storage: {get_storage_backend()}")
@@ -138,9 +252,9 @@ def cmd_help() -> int:
     print("Usage: oura-mcp <command>")
     print()
     print("Commands:")
-    print("  auth          Store your Oura Personal Access Token securely")
-    print("  auth-status   Check if the stored token is valid")
-    print("  auth-clear    Remove the stored token")
+    print("  auth          Authenticate via Oura OAuth2")
+    print("  auth-status   Check if the stored credential is valid")
+    print("  auth-clear    Remove stored credentials")
     print("  config        Print Claude Desktop config snippet")
     print("  serve         Start the MCP server")
     print()
