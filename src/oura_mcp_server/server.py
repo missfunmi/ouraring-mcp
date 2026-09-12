@@ -9,7 +9,10 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError:
+    from mcp.server.mcpserver import MCPServer as FastMCP
 
 
 class OuraClient:
