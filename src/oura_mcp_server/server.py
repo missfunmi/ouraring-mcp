@@ -9,7 +9,13 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 import httpx
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except ImportError:
+    from mcp.server.mcpserver import MCPServer as FastMCP
+
+
+_http_client = httpx.Client(timeout=30.0)
 
 
 class OuraClient:
@@ -18,15 +24,9 @@ class OuraClient:
     BASE_URL = "https://api.ouraring.com/v2/usercollection"
 
     def __init__(self, access_token: str):
-        """
-        Initialize the Oura API client.
-
-        Args:
-            access_token: Personal access token for Oura API
-        """
         self.access_token = access_token
         self.headers = {"Authorization": f"Bearer {access_token}"}
-        self.client = httpx.Client(timeout=30.0)
+        self.client = _http_client  # shared pool — not closed per-instance
 
     def get_sleep_data(
         self, start_date: date, end_date: Optional[date] = None
@@ -302,9 +302,15 @@ class OuraClient:
         # Return with the original structure but with transformed data
         return {"data": transformed_data}
 
-    def close(self) -> None:
-        """Close the HTTP client."""
-        self.client.close()
+    def validate_token(self) -> tuple[bool, str | None]:
+        """Check token validity against personal_info. Returns (valid, email_or_None)."""
+        try:
+            resp = self.client.get(f"{self.BASE_URL}/personal_info", headers=self.headers)
+            if resp.status_code == 200:
+                return True, resp.json().get("email")
+            return False, None
+        except Exception:
+            return False, None
 
 
 def parse_date(date_str: str) -> date:
@@ -328,9 +334,18 @@ def parse_date(date_str: str) -> date:
 # Create MCP server and OuraClient at module level
 mcp = FastMCP("Oura API MCP Server")
 
-# Default access token (will be overridden in main or by direct assignment)
-default_token = os.environ.get("OURA_API_TOKEN")
-oura_client = OuraClient(default_token) if default_token else None
+
+def _get_client() -> "OuraClient | None":
+    """Load the stored OAuth access token and return an OuraClient, or None if not authenticated."""
+    from oura_mcp_server.auth import get_access_token
+    from oura_mcp_server.auth.storage import TokenRefreshError
+    try:
+        token = get_access_token()
+    except TokenRefreshError as e:
+        import sys
+        print(f"[oura-mcp] {e}", file=sys.stderr)
+        return None
+    return OuraClient(token) if token else None
 
 
 # Add tools for querying sleep data
@@ -346,13 +361,14 @@ def get_sleep_data(start_date: str, end_date: str) -> dict[str, Any]:
     Returns:
         Dictionary containing sleep data
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
         end = parse_date(end_date)
-        return oura_client.get_sleep_data(start, end)
+        return client.get_sleep_data(start, end)
     except Exception as e:
         return {"error": str(e)}
 
@@ -369,13 +385,14 @@ def get_readiness_data(start_date: str, end_date: str) -> dict[str, Any]:
     Returns:
         Dictionary containing readiness data
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
         end = parse_date(end_date)
-        return oura_client.get_readiness_data(start, end)
+        return client.get_readiness_data(start, end)
     except Exception as e:
         return {"error": str(e)}
 
@@ -392,13 +409,14 @@ def get_resilience_data(start_date: str, end_date: str) -> dict[str, Any]:
     Returns:
         Dictionary containing resilience data
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
         end = parse_date(end_date)
-        return oura_client.get_resilience_data(start, end)
+        return client.get_resilience_data(start, end)
     except Exception as e:
         return {"error": str(e)}
 
@@ -412,12 +430,13 @@ def get_today_sleep_data() -> dict[str, Any]:
     Returns:
         Dictionary containing sleep data for today
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
-        return oura_client.get_sleep_data(today, today)
+        return client.get_sleep_data(today, today)
     except Exception as e:
         return {"error": str(e)}
 
@@ -430,12 +449,13 @@ def get_today_readiness_data() -> dict[str, Any]:
     Returns:
         Dictionary containing readiness data for today
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
-        return oura_client.get_readiness_data(today, today)
+        return client.get_readiness_data(today, today)
     except Exception as e:
         return {"error": str(e)}
 
@@ -448,18 +468,46 @@ def get_today_resilience_data() -> dict[str, Any]:
     Returns:
         Dictionary containing resilience data for today
     """
-    if oura_client is None:
-        return {"error": "Oura client not initialized. Please provide an access token."}
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
-        return oura_client.get_resilience_data(today, today)
+        return client.get_resilience_data(today, today)
     except Exception as e:
         return {"error": str(e)}
 
 
+@mcp.tool()
+def oura_auth_status() -> dict[str, Any]:
+    """
+    Check whether a valid Oura Personal Access Token is stored.
+    Use this tool when other Oura tools return authentication errors.
+    """
+    from oura_mcp_server.auth import get_access_token, get_storage_backend
+
+    token = get_access_token()
+    if not token:
+        return {
+            "authenticated": False,
+            "message": "No credential stored. Run 'oura-mcp auth' to authenticate.",
+        }
+
+    client = _get_client()
+    if client is None:
+        return {"authenticated": False, "message": "Credential found but client failed to initialise."}
+    valid, email = client.validate_token()
+    if valid:
+        return {"authenticated": True, "email": email, "storage": get_storage_backend()}
+    return {
+        "authenticated": False,
+        "message": "Token rejected. Run 'oura-mcp auth' to re-authenticate.",
+    }
+
+
 def main() -> None:
-    print("Starting Oura MCP server!")
+    print("Oura MCP server ready. Listening on stdio — press Ctrl+C to stop.", flush=True)
     mcp.run(transport="stdio")
 
 
