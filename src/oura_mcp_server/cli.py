@@ -199,7 +199,7 @@ def cmd_auth() -> int:
     print(f"  Account: {info}")
     print(f"  Storage: {get_storage_backend()}")
     print()
-    print("Run 'oura-mcp serve' to start the MCP server.")
+    print("Run 'oura-mcp install' to add it to Claude Desktop, then restart Claude.")
     return 0
 
 
@@ -233,16 +233,63 @@ def cmd_serve() -> int:
     return 0
 
 
-def cmd_config() -> int:
-    import json
+def _claude_config_path() -> "Path":
+    import platform
+    from pathlib import Path
+
+    if platform.system() == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    return Path(os.environ.get("APPDATA", "")) / "Claude" / "claude_desktop_config.json"
+
+
+def _oura_mcp_entry() -> dict:
     import shutil
     from pathlib import Path
 
     path = shutil.which("oura-mcp") or str(Path(sys.executable).parent / "oura-mcp")
-    config = {"ouraring": {"command": path, "args": ["serve"]}}
+    return {"command": path, "args": ["serve"]}
+
+
+def cmd_install() -> int:
+    import json
+
+    config_path = _claude_config_path()
+
+    if not config_path.exists():
+        print(f"Claude Desktop config not found at:\n  {config_path}")
+        print("Is Claude Desktop installed?")
+        return 1
+
+    try:
+        config = json.loads(config_path.read_text())
+    except Exception as e:
+        print(f"Error reading config: {e}")
+        return 1
+
+    config.setdefault("mcpServers", {})
+    config["mcpServers"]["ouraring"] = _oura_mcp_entry()
+
+    try:
+        config_path.write_text(json.dumps(config, indent=2))
+    except Exception as e:
+        print(f"Error writing config: {e}")
+        return 1
+
+    print(f"Added 'ouraring' to mcpServers in:\n  {config_path}")
+    print()
+    print("Restart Claude Desktop to apply the change.")
+    return 0
+
+
+def cmd_config() -> int:
+    import json
+
+    config = {"ouraring": _oura_mcp_entry()}
     print('Add this inside "mcpServers": {} in your Claude Desktop config:')
     print()
     print(json.dumps(config, indent=2))
+    print()
+    print("Or run 'oura-mcp install' to add it automatically.")
     return 0
 
 
@@ -255,6 +302,7 @@ def cmd_help() -> int:
     print("  auth          Authenticate via Oura OAuth2")
     print("  auth-status   Check if the stored credential is valid")
     print("  auth-clear    Remove stored credentials")
+    print("  install       Add ouraring to Claude Desktop config automatically")
     print("  config        Print Claude Desktop config snippet")
     print("  serve         Start the MCP server")
     print()
@@ -269,6 +317,7 @@ def main() -> int:
         "auth": cmd_auth,
         "auth-status": cmd_auth_status,
         "auth-clear": cmd_auth_clear,
+        "install": cmd_install,
         "config": cmd_config,
         "serve": cmd_serve,
         "help": cmd_help,

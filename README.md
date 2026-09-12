@@ -68,22 +68,15 @@ oura-mcp auth
 
 Enter your Client ID and Client Secret when prompted. Your browser will open for Oura's authorization page — approve it, and the tokens are stored securely (macOS Keychain when available, or `~/.config/ouraring-mcp/credentials.enc` as an AES-256-GCM fallback). No credentials are stored in any config file.
 
-### 4. Configure Claude for Desktop
+### 4. Add to Claude Desktop
 
-Add the following to your `claude_desktop_config.json` (located at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS or `%APPDATA%/Claude/claude_desktop_config.json` on Windows):
-
-```json
-{
-  "mcpServers": {
-    "ouraring": {
-      "command": "oura-mcp",
-      "args": ["serve"]
-    }
-  }
-}
+```bash
+oura-mcp install
 ```
 
-Restart Claude Desktop. No tokens or env vars needed in the config. Access tokens are refreshed automatically.
+This writes the server entry directly into `claude_desktop_config.json`. Restart Claude Desktop after running it. No tokens or env vars needed in the config — access tokens are refreshed automatically.
+
+If you prefer to edit the config manually, run `oura-mcp config` to print the snippet.
 
 ### Other CLI commands
 
@@ -92,6 +85,7 @@ Restart Claude Desktop. No tokens or env vars needed in the config. Access token
 | `oura-mcp auth` | Authenticate via Oura OAuth2 |
 | `oura-mcp auth-status` | Check if the stored credential is valid |
 | `oura-mcp auth-clear` | Remove stored credentials |
+| `oura-mcp install` | Add ouraring to Claude Desktop config automatically |
 | `oura-mcp config` | Print the Claude Desktop config snippet |
 | `oura-mcp serve` | Start the MCP server directly |
 
