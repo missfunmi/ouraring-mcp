@@ -23,6 +23,10 @@ ENV_VAR_NAME = "OURA_API_TOKEN"
 OURA_TOKEN_URL = "https://api.ouraring.com/oauth/token"
 
 
+class TokenRefreshError(Exception):
+    """Raised when a stored refresh token is rejected by Oura (revoked or expired)."""
+
+
 @dataclass
 class OAuthCredential:
     access_token: str
@@ -109,7 +113,9 @@ def _refresh_token(cred: OAuthCredential) -> OAuthCredential | None:
             timeout=15.0,
         )
         if resp.status_code != 200:
-            return None
+            raise TokenRefreshError(
+                f"Refresh token rejected (HTTP {resp.status_code}). Run 'oura-mcp auth' to re-authenticate."
+            )
         data = resp.json()
         new_cred = OAuthCredential(
             access_token=data["access_token"],

@@ -8,7 +8,6 @@ can derive the key — use the system keyring for stronger protection.
 
 import base64
 import contextlib
-import hashlib
 import os
 import platform
 import stat

@@ -3,6 +3,7 @@
 from oura_mcp_server.auth.keyring import CredentialResult, is_keyring_available
 from oura_mcp_server.auth.storage import (
     OAuthCredential,
+    TokenRefreshError,
     clear_credential,
     get_access_token,
     get_credential,
@@ -15,6 +16,7 @@ from oura_mcp_server.auth.storage import (
 __all__ = [
     "CredentialResult",
     "OAuthCredential",
+    "TokenRefreshError",
     "clear_credential",
     "get_access_token",
     "get_credential",

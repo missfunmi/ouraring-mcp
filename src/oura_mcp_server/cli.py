@@ -1,5 +1,6 @@
 """CLI commands for Oura Ring MCP Server."""
 
+import os
 import sys
 
 from oura_mcp_server.auth import (
@@ -79,14 +80,16 @@ def _run_oauth_flow(client_id: str, client_secret: str) -> OAuthCredential | Non
             pass  # suppress server logs
 
     server = HTTPServer(("localhost", 8085), CallbackHandler)
-    server.timeout = 120
 
     print("Opening browser for Oura authorization...")
     print(f"If it doesn't open, visit:\n  {auth_url}")
     print()
     webbrowser.open(auth_url)
 
-    server.handle_request()
+    deadline = time.monotonic() + 120
+    while not callback_data and time.monotonic() < deadline:
+        server.timeout = max(0.5, deadline - time.monotonic())
+        server.handle_request()
     server.server_close()
 
     if callback_data.get("error"):

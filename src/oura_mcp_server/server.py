@@ -15,21 +15,18 @@ except ImportError:
     from mcp.server.mcpserver import MCPServer as FastMCP
 
 
+_http_client = httpx.Client(timeout=30.0)
+
+
 class OuraClient:
     """Client for interacting with the Oura API."""
 
     BASE_URL = "https://api.ouraring.com/v2/usercollection"
 
     def __init__(self, access_token: str):
-        """
-        Initialize the Oura API client.
-
-        Args:
-            access_token: Personal access token for Oura API
-        """
         self.access_token = access_token
         self.headers = {"Authorization": f"Bearer {access_token}"}
-        self.client = httpx.Client(timeout=30.0)
+        self.client = _http_client  # shared pool — not closed per-instance
 
     def get_sleep_data(
         self, start_date: date, end_date: Optional[date] = None
@@ -305,9 +302,15 @@ class OuraClient:
         # Return with the original structure but with transformed data
         return {"data": transformed_data}
 
-    def close(self) -> None:
-        """Close the HTTP client."""
-        self.client.close()
+    def validate_token(self) -> tuple[bool, str | None]:
+        """Check token validity against personal_info. Returns (valid, email_or_None)."""
+        try:
+            resp = self.client.get(f"{self.BASE_URL}/personal_info", headers=self.headers)
+            if resp.status_code == 200:
+                return True, resp.json().get("email")
+            return False, None
+        except Exception:
+            return False, None
 
 
 def parse_date(date_str: str) -> date:
@@ -335,7 +338,11 @@ mcp = FastMCP("Oura API MCP Server")
 def _get_client() -> "OuraClient | None":
     """Load the stored OAuth access token and return an OuraClient, or None if not authenticated."""
     from oura_mcp_server.auth import get_access_token
-    token = get_access_token()
+    from oura_mcp_server.auth.storage import TokenRefreshError
+    try:
+        token = get_access_token()
+    except TokenRefreshError as e:
+        return None  # callers show "not authenticated"; e.args[0] has the detail
     return OuraClient(token) if token else None
 
 
@@ -488,20 +495,13 @@ def oura_auth_status() -> dict[str, Any]:
     client = _get_client()
     if client is None:
         return {"authenticated": False, "message": "Credential found but client failed to initialise."}
-    try:
-        resp = client.client.get(
-            "https://api.ouraring.com/v2/usercollection/personal_info",
-            headers=client.headers,
-        )
-        if resp.status_code == 200:
-            email = resp.json().get("email")
-            return {"authenticated": True, "email": email, "storage": get_storage_backend()}
-        return {
-            "authenticated": False,
-            "message": f"Token rejected (HTTP {resp.status_code}). Run 'oura-mcp auth' to re-authenticate.",
-        }
-    except Exception as e:
-        return {"authenticated": False, "message": f"Network error: {e}"}
+    valid, email = client.validate_token()
+    if valid:
+        return {"authenticated": True, "email": email, "storage": get_storage_backend()}
+    return {
+        "authenticated": False,
+        "message": "Token rejected. Run 'oura-mcp auth' to re-authenticate.",
+    }
 
 
 def main() -> None:
