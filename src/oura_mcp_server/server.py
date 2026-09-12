@@ -354,7 +354,7 @@ def get_sleep_data(start_date: str, end_date: str) -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
@@ -378,7 +378,7 @@ def get_readiness_data(start_date: str, end_date: str) -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
@@ -402,7 +402,7 @@ def get_resilience_data(start_date: str, end_date: str) -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         start = parse_date(start_date)
@@ -423,7 +423,7 @@ def get_today_sleep_data() -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
@@ -442,7 +442,7 @@ def get_today_readiness_data() -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
@@ -461,7 +461,7 @@ def get_today_resilience_data() -> dict[str, Any]:
     """
     client = _get_client()
     if client is None:
-        return {"error": "Not authenticated. Run 'oura-mcp auth' to store your Personal Access Token."}
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
         today = date.today()
