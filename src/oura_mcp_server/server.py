@@ -342,7 +342,9 @@ def _get_client() -> "OuraClient | None":
     try:
         token = get_access_token()
     except TokenRefreshError as e:
-        return None  # callers show "not authenticated"; e.args[0] has the detail
+        import sys
+        print(f"[oura-mcp] {e}", file=sys.stderr)
+        return None
     return OuraClient(token) if token else None
 
 
