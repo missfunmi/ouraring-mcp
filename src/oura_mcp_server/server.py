@@ -5,7 +5,7 @@ This server exposes methods to query the Oura API for sleep, readiness, and resi
 """
 
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import httpx
@@ -421,6 +421,54 @@ def get_resilience_data(start_date: str, end_date: str) -> dict[str, Any]:
         return {"error": str(e)}
 
 
+@mcp.tool()
+def get_daily_sleep_data(start_date: str, end_date: str) -> dict[str, Any]:
+    """
+    Get daily sleep score data for a specific date range.
+
+    Returns the aggregate sleep score (the number shown on Oura's home screen),
+    not raw session detail. Use get_sleep_data for per-session detail.
+
+    Args:
+        start_date: Start date in ISO format (YYYY-MM-DD)
+        end_date: End date in ISO format (YYYY-MM-DD)
+
+    Returns:
+        Dictionary containing daily sleep score data
+    """
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
+
+    try:
+        start = parse_date(start_date)
+        end = parse_date(end_date)
+        return client.get_daily_sleep_data(start, end)
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def get_today_daily_sleep_data() -> dict[str, Any]:
+    """
+    Get today's daily sleep score.
+
+    Returns the aggregate sleep score (the number shown on Oura's home screen),
+    not raw session detail. Use get_today_sleep_data for per-session detail.
+
+    Returns:
+        Dictionary containing today's daily sleep score data
+    """
+    client = _get_client()
+    if client is None:
+        return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
+
+    try:
+        return client.get_daily_sleep_data(date.today() - timedelta(days=1), date.today())
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # Add tools for querying today's data
 @mcp.tool()
 def get_today_sleep_data() -> dict[str, Any]:
@@ -435,8 +483,7 @@ def get_today_sleep_data() -> dict[str, Any]:
         return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
-        today = date.today()
-        return client.get_sleep_data(today, today)
+        return client.get_sleep_data(date.today() - timedelta(days=1), date.today())
     except Exception as e:
         return {"error": str(e)}
 
@@ -454,8 +501,7 @@ def get_today_readiness_data() -> dict[str, Any]:
         return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
-        today = date.today()
-        return client.get_readiness_data(today, today)
+        return client.get_readiness_data(date.today() - timedelta(days=1), date.today())
     except Exception as e:
         return {"error": str(e)}
 
@@ -473,8 +519,7 @@ def get_today_resilience_data() -> dict[str, Any]:
         return {"error": "Not authenticated. Run 'oura-mcp auth' to authenticate."}
 
     try:
-        today = date.today()
-        return client.get_resilience_data(today, today)
+        return client.get_resilience_data(date.today() - timedelta(days=1), date.today())
     except Exception as e:
         return {"error": str(e)}
 
